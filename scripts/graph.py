@@ -2,12 +2,13 @@ import sqlite3
 import plotly.graph_objects as go
 
 
-def get_packet_totals_per_minute(db_file):
+def get_packet_totals_per_minute(db_file, outgoing_filter=None):
     """
     Fetch packet totals per minute for each packet name.
 
     Args:
         db_file (str): Path to the SQLite file.
+        outgoing_filter (str): Optional filter ('outgoing', 'incoming', or None for all packets).
 
     Returns:
         dict: A dictionary where keys are timestamps (in minutes), and values are dictionaries
@@ -16,17 +17,24 @@ def get_packet_totals_per_minute(db_file):
     with sqlite3.connect(db_file) as conn:
         cursor = conn.cursor()
 
-        # Query to get all packets, grouped by packet_name and minute of collection
-        cursor.execute("""
+        # Base query to get packet totals
+        query = """
             SELECT
                 packet_name,
                 SUM(amount) AS total_amount,
                 strftime('%Y-%m-%d %H:%M', datetime(collected_at / 1000, 'unixepoch')) AS minute
             FROM batched_packets
-            GROUP BY packet_name, minute
-            ORDER BY minute
-        """)
+        """
 
+        # Apply filter based on outgoing field if specified
+        if outgoing_filter == "outgoing":
+            query += " WHERE outgoing = 1 "
+        elif outgoing_filter == "incoming":
+            query += " WHERE outgoing = 0 "
+
+        query += "GROUP BY packet_name, minute ORDER BY minute"
+
+        cursor.execute(query)
         rows = cursor.fetchall()
 
     # Organize the data into a dictionary: {minute: {packet_name: total_amount}}
@@ -117,8 +125,15 @@ def plot_packet_totals(packet_totals):
 if __name__ == "__main__":
     db_file = "packet.db"
 
-    # Get the packet totals per minute
-    packet_totals = get_packet_totals_per_minute(db_file)
+    # User input for filtering packets: "all", "outgoing", or "incoming"
+    outgoing_filter = input(
+        "Enter packet type filter ('all', 'outgoing', 'incoming'): ").strip().lower()
 
-    # Plot the result
-    plot_packet_totals(packet_totals)
+    if outgoing_filter not in ["all", "outgoing", "incoming"]:
+        print("Invalid input. Please enter 'all', 'outgoing', or 'incoming'.")
+    else:
+        # Get the packet totals per minute based on the user filter
+        packet_totals = get_packet_totals_per_minute(db_file, outgoing_filter)
+
+        # Plot the result
+        plot_packet_totals(packet_totals)
