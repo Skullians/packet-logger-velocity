@@ -1,3 +1,4 @@
+import argparse
 import sqlite3
 import plotly.graph_objects as go
 
@@ -144,8 +145,8 @@ def plot_packet_totals(packet_totals, time_granularity="minute", sort_by='amount
                 direction="down",
                 pad={"r": 10, "t": 10},
                 showactive=True,
-                x=0.1,
-                xanchor="left",
+                x=0.5,
+                xanchor="right",
                 y=1.1,
                 yanchor="top"
             )
@@ -177,14 +178,20 @@ def plot_packet_totals(packet_totals, time_granularity="minute", sort_by='amount
             tracegroupgap=3,
         ),
         plot_bgcolor="white",
-        height=600,
+        height=1080,
+        width=1920
     )
 
     fig.show()
 
 
 if __name__ == "__main__":
-    db_file = "packet.sqlite"
+    parser = argparse.ArgumentParser(description="Packet Analyzer")
+    parser.add_argument(
+        "--file", type=str, default="packet.sqlite", help="Path to the database file")
+    args = parser.parse_args()
+
+    db_file = args.file
     outgoing_filter = input(
         "Enter packet type filter ('all', 'outgoing', 'incoming'): ").strip().lower()
     time_granularity = input(
