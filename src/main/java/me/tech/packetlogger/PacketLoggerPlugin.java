@@ -3,7 +3,6 @@ package me.tech.packetlogger;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.*;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
-import org.bstats.bukkit.Metrics;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
@@ -22,7 +21,7 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
     private static final DateTimeFormatter FOLDER_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private BatchedPacketsService batchedPacketsService;
-    private Metrics metrics;
+    private BukkitMetrics metrics;
 
     @Override
     public void onLoad() {
@@ -32,11 +31,10 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        metrics = new Metrics(this, SERVICE_ID);
-
-        saveDefaultConfig();
         PacketEvents.getAPI().init();
+        saveDefaultConfig();
 
+        metrics = new BukkitMetrics(this, SERVICE_ID);
         purge();
 
         this.batchedPacketsService = new BatchedPacketsService(this);
