@@ -11,6 +11,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,14 +19,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class BatchedPacketsService {
-    private static final long NOW_MS = Instant.now().toEpochMilli();
     private static final Logger log = LoggerFactory.getLogger(BatchedPacketsService.class);
 
     private final PacketLoggerPlugin plugin;
     private final Path dataFolderPath;
     private final ExecutorService executor;
 
-    private final Map<String, Boolean> boundCache = new ConcurrentHashMap<>();
+    private final Set<String> packetBoundCache = ConcurrentHashMap.newKeySet();
     private final Map<String, AtomicInteger> packetQueue = new ConcurrentHashMap<>();
 
     public BatchedPacketsService(
@@ -38,29 +38,44 @@ public final class BatchedPacketsService {
         createSqlite();
     }
 
+    /**
+     * Add a packet to the queue.
+     * @param packetName the packet name
+     * @param outgoing whether it's incoming or outgoing
+     */
     public void add(String packetName, boolean outgoing) {
-        if(!boundCache.containsKey(packetName)) {
-            boundCache.put(packetName, outgoing);
+        if(!packetBoundCache.contains(packetName)) {
+            packetBoundCache.add(packetName);
+            // quickly add to db.
+            executor.submit(() -> addPacketBound(packetName, outgoing));
         }
 
         packetQueue.computeIfAbsent(packetName, (k) -> new AtomicInteger(0))
             .getAndIncrement();
     }
 
+    /**
+     * Start publishing packet batches to the SQLite database.
+     */
     public void startPublish() {
+        final var flushSeconds = plugin.getConfig().getInt("flush-seconds", 5);
+
         final var scheduler = plugin.getServer().getAsyncScheduler();
         scheduler.runAtFixedRate(plugin, (task) -> {
             executor.submit(this::flush);
-        }, 0L, 3L, TimeUnit.SECONDS);
-
+        }, 0L, flushSeconds, TimeUnit.SECONDS);
     }
 
+    /**
+     * Flush the contents of the queue into SQLite.
+     */
     public void flush() {
         try(final var conn = getConnection()) {
             conn.setAutoCommit(false);
-            final String sql = "INSERT INTO batched_packets (packet_name, amount, outgoing, collected_at) VALUES (?, ?, ?, ?)";
+            final String sql = "INSERT INTO batched_packets (packet_name, amount, collected_at) VALUES (?, ?, ?)";
 
             final var counter = new AtomicInteger();
+            final var nowMs = Instant.now().toEpochMilli();
 
             try(final var statement = conn.prepareStatement(sql)) {
                 for(final var packet : packetQueue.keySet()) {
@@ -68,8 +83,7 @@ public final class BatchedPacketsService {
 
                     statement.setObject(1, packet);
                     statement.setObject(2, amount);
-                    statement.setObject(3, boundCache.getOrDefault(packet, false));
-                    statement.setObject(4, Instant.now().toEpochMilli());
+                    statement.setObject(3, nowMs);
                     statement.addBatch();
 
                     if(counter.getAndIncrement() % 15 == 0) {
@@ -94,18 +108,53 @@ public final class BatchedPacketsService {
         packetQueue.clear();
     }
 
-    private void createSqlite() {
-        final var dbFilePath = dataFolderPath.resolve(getDBFileName());
+    /**
+     * Add a packet bound to the SQLite database.
+     * @param packetName the packet name
+     * @param outgoing whether it's incoming or outgoing
+     */
+    private void addPacketBound(String packetName, boolean outgoing) {
+        try(final var conn = getConnection()) {
+            final String sql = "INSERT INTO packet_bound (packet_name, outgoing) VALUES (?, ?)";
 
-        if(Files.exists(dbFilePath)) {
-            log.warn("{} already exists.", getDBFileName());
-            return;
+            try(final var statement = conn.prepareStatement(sql)) {
+                statement.setString(1, packetName);
+                statement.setBoolean(2, outgoing);
+
+                statement.executeUpdate();
+            } catch(SQLException ex) {
+                ex.printStackTrace();
+            }
+        } catch(SQLException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    /**
+     * Create the SQLite Database
+     * This method will create the `batched_packets` table which contains the actual
+     * packet information
+     * And this method will create the `packet_bound` table which contains whether a packet is
+     * incoming or outgoing which will then be joined into the graph.
+     */
+    private void createSqlite() {
+        final var dbFolder = dataFolderPath.resolve(Constants.DB_FOLDER_NAME);
+        if(!Files.exists(dbFolder)) {
+            try {
+                Files.createDirectory(dbFolder);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
-        try {
-            Files.createFile(dbFilePath);
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
+        final var dbFile = dataFolderPath.resolve(Constants.DB_FOLDER_NAME)
+            .resolve(Constants.SQLITE_FILE_NAME);
+        if(!Files.exists(dbFile)) {
+            try {
+                Files.createFile(dbFile);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         try (var conn = getConnection()) {
@@ -114,22 +163,38 @@ public final class BatchedPacketsService {
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "packet_name TEXT NOT NULL, " +
                     "amount INTEGER NOT NULL, " +
-                    "outgoing INTEGER NOT NULL, " +
                     "collected_at INTEGER NOT NULL" +
-                    ")");
+                    ");");
+
+            conn.createStatement()
+                    .execute("CREATE TABLE IF NOT EXISTS packet_bound (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                        "packet_name TEXT NOT NULL, " +
+                        "outgoing INTEGER NOT NULL " +
+                        ");");
             log.info("Created batched_packets table in SQLite DB.");
         } catch (SQLException ex) {
             throw new RuntimeException(ex);
         }
     }
 
+    /**
+     * Grab a new SQLite Connection
+     * @return the {@link Connection}
+     * @throws SQLException if the driver manager failed
+     */
     private Connection getConnection() throws SQLException {
         return DriverManager.getConnection(
-            "jdbc:sqlite:%s".formatted(dataFolderPath.resolve(getDBFileName()).toAbsolutePath())
+            "jdbc:sqlite:%s".formatted(getDBFilePath().toAbsolutePath())
         );
     }
 
-    private String getDBFileName() {
-        return "packets_%s.db".formatted(NOW_MS);
+    /**
+     * Get the path to the SQLite file
+     * @return the {@link Path} to the SQLite file
+     */
+    private Path getDBFilePath() {
+        return dataFolderPath.resolve(Constants.DB_FOLDER_NAME)
+            .resolve(Constants.SQLITE_FILE_NAME);
     }
 }

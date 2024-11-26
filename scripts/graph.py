@@ -17,22 +17,22 @@ def get_packet_totals_per_minute(db_file, outgoing_filter=None):
     with sqlite3.connect(db_file) as conn:
         cursor = conn.cursor()
 
-        # Base query to get packet totals
         query = """
             SELECT
-                packet_name,
-                SUM(amount) AS total_amount,
-                strftime('%Y-%m-%d %H:%M', datetime(collected_at / 1000, 'unixepoch')) AS minute
+                batched_packets.packet_name,
+                SUM(batched_packets.amount) AS total_amount,
+                strftime('%Y-%m-%d %H:%M', datetime(batched_packets.collected_at / 1000, 'unixepoch')) AS minute
             FROM batched_packets
+            JOIN packet_bound ON batched_packets.packet_name = packet_bound.packet_name
         """
 
-        # Apply filter based on outgoing field if specified
+        # Apply filter based on outgoing field from the packet_bound table if specified
         if outgoing_filter == "outgoing":
-            query += " WHERE outgoing = 1 "
+            query += " WHERE packet_bound.outgoing = 1 "
         elif outgoing_filter == "incoming":
-            query += " WHERE outgoing = 0 "
+            query += " WHERE packet_bound.outgoing = 0 "
 
-        query += "GROUP BY packet_name, minute ORDER BY minute"
+        query += "GROUP BY batched_packets.packet_name, minute ORDER BY minute"
 
         cursor.execute(query)
         rows = cursor.fetchall()

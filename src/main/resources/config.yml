@@ -1,1 +1,5 @@
-database: test.db
+# Amount of time until all queued packets are flushed to DB
+flush-seconds: 5
+
+# How often to purge the logs
+purge-days: 14
