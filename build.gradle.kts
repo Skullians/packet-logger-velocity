@@ -24,6 +24,8 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
+    compileOnly("org.bstats:bstats-bukkit:3.0.2")
+
     implementation("com.github.retrooper:packetevents-spigot:2.6.0")
 }
 
@@ -35,6 +37,7 @@ java {
 tasks.withType<ShadowJar> {
     relocate("com.github.retrooper.packetevents", "me.tech.packetlogger.packetevents.api")
     relocate("io.github.retrooper.packetevents", "me.tech.packetlogger.packetevents.impl")
+    relocate("org.bstats", "me.tech.bstats")
 
     minimize()
 }

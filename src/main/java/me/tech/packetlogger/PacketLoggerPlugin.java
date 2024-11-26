@@ -3,16 +3,13 @@ package me.tech.packetlogger;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.*;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
+import org.bstats.bukkit.Metrics;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -20,9 +17,12 @@ import java.time.temporal.ChronoUnit;
 
 public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
     private static final Logger log = LoggerFactory.getLogger(PacketLoggerPlugin.class);
+
+    private static final int SERVICE_ID = 24008;
     private static final DateTimeFormatter FOLDER_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private BatchedPacketsService batchedPacketsService;
+    private Metrics metrics;
 
     @Override
     public void onLoad() {
@@ -32,6 +32,8 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        metrics = new Metrics(this, SERVICE_ID);
+
         saveDefaultConfig();
         PacketEvents.getAPI().init();
 
@@ -57,10 +59,14 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         PacketEvents.getAPI().terminate();
         getServer().getAsyncScheduler().cancelTasks(this);
+        metrics.shutdown();
 
         batchedPacketsService.flush();
     }
 
+    /**
+     * Purge old packet logs.
+     */
     private void purge() {
         final var purgeDays = getConfig().getInt("purge-days", 14);
         log.info("Packet Logs will be purged after {} days.", purgeDays);
@@ -92,6 +98,10 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Recursively delete a folder
+     * @param file the parent
+     */
     private void deleteRecursively(final File file) {
         if(file.isDirectory()) {
             for(final var child : file.listFiles()) {
