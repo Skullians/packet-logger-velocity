@@ -43,12 +43,12 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
         PacketEvents.getAPI().getEventManager().registerListener(new PacketListener() {
             @Override
             public void onPacketSend(PacketSendEvent event) {
-                batchedPacketsService.add(event.getPacketType().getName(), true);
+                batchedPacketsService.add(event);
             }
 
             @Override
             public void onPacketReceive(PacketReceiveEvent event) {
-                batchedPacketsService.add(event.getPacketType().getName(), false);
+                batchedPacketsService.add(event);
             }
         }, PacketListenerPriority.MONITOR);
     }

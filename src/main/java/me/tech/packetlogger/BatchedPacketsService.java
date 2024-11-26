@@ -1,5 +1,8 @@
 package me.tech.packetlogger;
 
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.netty.buffer.ByteBufHelper;
+import com.github.retrooper.packetevents.protocol.PacketSide;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class BatchedPacketsService {
     private static final Logger log = LoggerFactory.getLogger(BatchedPacketsService.class);
@@ -26,7 +30,7 @@ public final class BatchedPacketsService {
     private final ExecutorService executor;
 
     private final Set<String> packetBoundCache = ConcurrentHashMap.newKeySet();
-    private final Map<String, AtomicInteger> packetQueue = new ConcurrentHashMap<>();
+    private final Map<String, PacketRecord> packetQueue = new ConcurrentHashMap<>();
 
     public BatchedPacketsService(
         final PacketLoggerPlugin plugin
@@ -40,18 +44,22 @@ public final class BatchedPacketsService {
 
     /**
      * Add a packet to the queue.
-     * @param packetName the packet name
-     * @param outgoing whether it's incoming or outgoing
+     * @param event the dispatched packet event
      */
-    public void add(String packetName, boolean outgoing) {
+    public void add(ProtocolPacketEvent event) {
+        final String packetName = event.getPacketType().getName();
+        final int size = ByteBufHelper.readableBytes(event.getByteBuf());
+        final boolean outgoing = event.getPacketType().getSide() == PacketSide.SERVER;
+
         if(!packetBoundCache.contains(packetName)) {
             packetBoundCache.add(packetName);
             // quickly add to db.
             executor.submit(() -> addPacketBound(packetName, outgoing));
         }
 
-        packetQueue.computeIfAbsent(packetName, (k) -> new AtomicInteger(0))
-            .getAndIncrement();
+        final var record = packetQueue.computeIfAbsent(packetName, (k) -> new PacketRecord());
+        record.amount.getAndIncrement();
+        record.size.getAndAdd(size);
     }
 
     /**
@@ -72,18 +80,21 @@ public final class BatchedPacketsService {
     public void flush() {
         try(final var conn = getConnection()) {
             conn.setAutoCommit(false);
-            final String sql = "INSERT INTO batched_packets (packet_name, amount, collected_at) VALUES (?, ?, ?)";
+            final String sql = "INSERT INTO batched_packets (packet_name, amount, size_bytes, collected_at) VALUES (?, ?, ?, ?)";
 
             final var counter = new AtomicInteger();
             final var nowMs = Instant.now().toEpochMilli();
 
             try(final var statement = conn.prepareStatement(sql)) {
                 for(final var packet : packetQueue.keySet()) {
-                    final var amount = packetQueue.get(packet).get();
+                    final var record = packetQueue.get(packet);
+                    final var amount = record.amount.get();
+                    final var size = record.size.get();
 
                     statement.setObject(1, packet);
                     statement.setObject(2, amount);
-                    statement.setObject(3, nowMs);
+                    statement.setObject(3, size);
+                    statement.setObject(4, nowMs);
                     statement.addBatch();
 
                     if(counter.getAndIncrement() % 15 == 0) {
@@ -162,7 +173,8 @@ public final class BatchedPacketsService {
                 .execute("CREATE TABLE IF NOT EXISTS batched_packets (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "packet_name TEXT NOT NULL, " +
-                    "amount INTEGER NOT NULL, " +
+                    "amount INTEGER NOT NULL," +
+                    "size_bytes INTEGER NOT NULL, " +
                     "collected_at INTEGER NOT NULL" +
                     ");");
 
@@ -196,5 +208,11 @@ public final class BatchedPacketsService {
     private Path getDBFilePath() {
         return dataFolderPath.resolve(Constants.DB_FOLDER_NAME)
             .resolve(Constants.SQLITE_FILE_NAME);
+    }
+
+    private record PacketRecord(AtomicInteger amount, AtomicLong size) {
+        public PacketRecord() {
+            this(new AtomicInteger(0), new AtomicLong(0));
+        }
     }
 }
