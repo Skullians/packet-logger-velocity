@@ -2,14 +2,18 @@
 
 packet-logger is a plugin that simply tracks the packets coming and going from your server and
 displays it in a digestible and easy graph.
+
 ---
+
 ### 🛠 How Does It Work?
 packet-logger collects anonymous packet data from your server and the clients connected to your server
 which is then saved into a SQLite file every 5 seconds by default.
 
 You can then simply download the SQLite file and parse it using the provided Python script
 to analyze the amount of packets and size of those packets.
+
 ---
+
 ### 🐍 Analyze Using the Python Script
 > [!NOTE]
 > This script was tested with Python 3.11.4 and Plotly 5.24.1
