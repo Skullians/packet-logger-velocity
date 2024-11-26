@@ -66,8 +66,6 @@ public final class BatchedPacketsService {
                 for(final var packet : packetQueue.keySet()) {
                     final var amount = packetQueue.get(packet).get();
 
-                    log.info("There have been {} of {} sent in the last 3 seconds.", amount, packet);
-
                     statement.setObject(1, packet);
                     statement.setObject(2, amount);
                     statement.setObject(3, boundCache.getOrDefault(packet, false));
