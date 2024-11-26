@@ -21,4 +21,4 @@ After you've executed the command you'll be prompted to enter whether you want t
 whether you want to see the packets every minute or every hour. After that it'll parse the SQLite file and you'll be greeted
 with a visualized representation of your server and client packets.
 
-![Imgur](https://imgur.com/j9BpIR6)
+![Viewer Screenshot](https://github.com/user-attachments/assets/5229b879-de55-4224-ac1d-474f14355587)
