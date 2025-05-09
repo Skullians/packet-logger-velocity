@@ -24,14 +24,7 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
     private BukkitMetrics metrics;
 
     @Override
-    public void onLoad() {
-        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
-        PacketEvents.getAPI().load();
-    }
-
-    @Override
     public void onEnable() {
-        PacketEvents.getAPI().init();
         saveDefaultConfig();
 
         metrics = new BukkitMetrics(this, SERVICE_ID);
@@ -55,7 +48,6 @@ public final class PacketLoggerPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        PacketEvents.getAPI().terminate();
         getServer().getAsyncScheduler().cancelTasks(this);
         metrics.shutdown();
 

@@ -25,7 +25,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
 
-    implementation("com.github.retrooper:packetevents-spigot:2.6.0")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.7.0")
 }
 
 
@@ -34,9 +34,6 @@ java {
 }
 
 tasks.withType<ShadowJar> {
-    relocate("com.github.retrooper.packetevents", "me.tech.packetlogger.packetevents.api")
-    relocate("io.github.retrooper.packetevents", "me.tech.packetlogger.packetevents.impl")
-
     minimize()
 }
 
@@ -44,4 +41,6 @@ bukkit {
     main = "me.tech.packetlogger.PacketLoggerPlugin"
     authors = listOf("DebitCardz").sorted()
     apiVersion = "1.20"
+
+    depend = listOf("packetevents")
 }
