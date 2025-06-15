@@ -1,2 +1,2 @@
-rootProject.name = "packet-logger"
+rootProject.name = "packet-logger-velocity"
 

@@ -36,7 +36,7 @@ public final class BatchedPacketsService {
         final PacketLoggerPlugin plugin
     ) {
         this.plugin = plugin;
-        this.dataFolderPath = plugin.getDataFolder().toPath();
+        this.dataFolderPath = plugin.dataDirectory;
         this.executor = Executors.newSingleThreadExecutor();
 
         createSqlite();
@@ -66,12 +66,12 @@ public final class BatchedPacketsService {
      * Start publishing packet batches to the SQLite database.
      */
     public void startPublish() {
-        final var flushSeconds = plugin.getConfig().getInt("flush-seconds", 5);
+        final var flushSeconds = plugin.config.getInt("flush-seconds", 5);
 
-        final var scheduler = plugin.getServer().getAsyncScheduler();
-        scheduler.runAtFixedRate(plugin, (task) -> {
+        final var scheduler = plugin.server.getScheduler();
+        scheduler.buildTask(plugin, () -> {
             executor.submit(this::flush);
-        }, 0L, flushSeconds, TimeUnit.SECONDS);
+        }).repeat(flushSeconds, TimeUnit.SECONDS);
     }
 
     /**
