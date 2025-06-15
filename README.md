@@ -1,4 +1,9 @@
-# packet-logger
+# packet-logger-velocity
+
+This is a port of packet-logger to Velocity that I did in 20 minutes.\
+Hopefully everything should work. bStats has been disabled due to the listing being for bukkit-derived software.
+
+All credits go towards DebitCardsz, the original developer.
 
 packet-logger is a plugin that simply tracks the packets coming and going from your server and
 displays it in a digestible and easy graph.
