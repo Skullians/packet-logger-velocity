@@ -47,16 +47,14 @@ public class PacketLoggerPlugin {
     public ProxyServer server;
     private Logger logger;
     public Path dataDirectory;
-    private final VelocityMetrics.Factory metricsFactory;
 
     public final YamlDocument config;
 
     @Inject
-    public PacketLoggerPlugin(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory, VelocityMetrics.Factory factory) {
+    public PacketLoggerPlugin(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
         this.server = server;
         this.logger = logger;
         this.dataDirectory = dataDirectory;
-        this.metricsFactory = factory;
 
         try {
             config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"),
@@ -72,7 +70,7 @@ public class PacketLoggerPlugin {
             Class.forName("org.sqlite.JDBC");
         } catch (Exception e) { throw new RuntimeException(e); }
 
-        this.metrics = this.metricsFactory.make(this, SERVICE_ID);
+        //this.metrics = this.metricsFactory.make(this, SERVICE_ID);
         purge();
 
         this.batchedPacketsService = new BatchedPacketsService(this);
@@ -94,7 +92,7 @@ public class PacketLoggerPlugin {
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
         server.getScheduler().tasksByPlugin(this).forEach(ScheduledTask::cancel);
-        metrics.shutdown();
+        //metrics.shutdown();
 
         batchedPacketsService.flush();
     }
